@@ -3,22 +3,29 @@ module Main exposing (..)
 import Browser
 import Html exposing (..)
 import Html.Attributes exposing (src)
+import Html.Events exposing (..)
+import Set exposing (Set)
+
 
 
 ---- MODEL ----
 
 
 type alias Model =
-    {}
+    { guesses : Set String }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( {}, Cmd.none )
+    ( { guesses = Set.empty
+      }
+    , Cmd.none
+    )
+
 
 phrase : String
-phrase = 
-    "hello world"    
+phrase =
+    "hello world"
 
 
 
@@ -26,12 +33,14 @@ phrase =
 
 
 type Msg
-    = NoOp
+    = Guess String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        Guess char ->
+            ( { model | guesses = Set.insert char model.guesses } , Cmd.none )
 
 
 
@@ -40,23 +49,53 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    let 
-        phraseHtml = 
+    let
+        phraseHtml =
+            phrase
+                |> String.split ""
+                |> List.map
+                    (\char ->
+                        if char == " " then
+                            " "
+
+                        else if Set.member char model.guesses then
+                            char
+
+                        else
+                            " _"
+                    )
+                |> List.map
+                    (\char ->
+                        span [] [ text char ]
+                    )
+                |> div []
+
+        phraseSet =
             phrase
             |> String.split ""
-            |> List.map (\char -> 
-                if char == " " then
-                    " "
-                else 
-                    " _"   
-                )
-            |> List.map (\char ->
-               span [] [ text char ]
-               )
-            |> div []      
+            |> Set.fromList
+
+        failuresHtml = 
+            model.guesses
+            |> Set.toList
+            |> List.filter (\char -> not <| Set.member char phraseSet)
+            |> List.map (\char -> span [] [ text char ])
+            |> div []
+
+
+        buttonsHtml =
+            "abcdefghijklmnopqrstuvwxyz"
+                |> String.split ""
+                |> List.map
+                    (\char ->
+                        button [ onClick <| Guess char ] [ text char ]
+                    )
+                |> div []
     in
     div []
         [ phraseHtml
+        , buttonsHtml
+        , failuresHtml
         ]
 
 
