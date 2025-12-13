@@ -4,6 +4,8 @@ import Browser
 import Html exposing (..)
 import Html.Attributes exposing (src)
 import Html.Events exposing (..)
+import Http
+import Json.Decode as Decode exposing (Decoder)
 import Set exposing (Set)
 
 
@@ -11,21 +13,23 @@ import Set exposing (Set)
 ---- MODEL ----
 
 
-type alias Model =
-    { guesses : Set String }
+type Model
+    = Loading
+    | Running GameState
+    | Error
+
+
+type alias GameState =
+    { phrase : String
+    , guesses : Set String
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { guesses = Set.empty
-      }
-    , Cmd.none
+    ( Loading
+    , fetchWord
     )
-
-
-phrase : String
-phrase =
-    "hello world"
 
 
 
@@ -34,13 +38,44 @@ phrase =
 
 type Msg
     = Guess String
+    | Restart
+    | NewPhrase (Result Http.Error String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Guess char ->
-            ( { model | guesses = Set.insert char model.guesses } , Cmd.none )
+            case model of
+                Running gameState ->
+                    ( Running { gameState | guesses = Set.insert char gameState.guesses }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        Restart ->
+            ( Loading, fetchWord )
+
+        NewPhrase result ->
+            case result of
+                Ok phrase ->
+                    ( Running { phrase = phrase, guesses = Set.empty }, Cmd.none )
+
+                Err _ ->
+                    ( Error, Cmd.none )
+
+
+fetchWord : Cmd Msg
+fetchWord =
+    Http.get
+        { url = "https://snapdragon-fox.glitch.me/word"
+        , expect = Http.expectJson NewPhrase wordDecoder
+        }
+
+
+wordDecoder : Decoder String
+wordDecoder =
+    Decode.field "word" Decode.string
 
 
 
@@ -49,16 +84,29 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+    case model of
+        Loading ->
+            div [] [ text "Loading..." ]
+
+        Running gameState ->
+            viewGameState gameState
+
+        Error ->
+            div [] [ text "Error" ]
+
+
+viewGameState : GameState -> Html Msg
+viewGameState gameState =
     let
         phraseHtml =
-            phrase
+            gameState.phrase
                 |> String.split ""
                 |> List.map
                     (\char ->
                         if char == " " then
                             " "
 
-                        else if Set.member char model.guesses then
+                        else if Set.member char gameState.guesses then
                             char
 
                         else
@@ -71,17 +119,16 @@ view model =
                 |> div []
 
         phraseSet =
-            phrase
-            |> String.split ""
-            |> Set.fromList
+            gameState.phrase
+                |> String.split ""
+                |> Set.fromList
 
-        failuresHtml = 
-            model.guesses
-            |> Set.toList
-            |> List.filter (\char -> not <| Set.member char phraseSet)
-            |> List.map (\char -> span [] [ text char ])
-            |> div []
-
+        failuresHtml =
+            gameState.guesses
+                |> Set.toList
+                |> List.filter (\char -> not <| Set.member char phraseSet)
+                |> List.map (\char -> span [] [ text char ])
+                |> div []
 
         buttonsHtml =
             "abcdefghijklmnopqrstuvwxyz"
@@ -96,6 +143,7 @@ view model =
         [ phraseHtml
         , buttonsHtml
         , failuresHtml
+        , button [ onClick Restart ] [ text "Restart" ]
         ]
 
 
